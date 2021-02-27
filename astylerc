@@ -1,0 +1,3 @@
+style=linux
+indent=tab=8
+max-code-length=100 # use middle value between 80 char terminals and 120 github limit

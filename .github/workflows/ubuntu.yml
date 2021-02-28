@@ -1,4 +1,4 @@
-name: "ubuntu"
+name: "Build"
 
 on:
   push:
@@ -8,8 +8,11 @@ on:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        os: [ ubuntu-18.04, ubuntu-20.04 ]
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v2

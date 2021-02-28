@@ -32,8 +32,6 @@ offset (-o) determines the input file offset from where to start
 reading. If the input file is smaller than the selected memory type,
 the remaining memory will be filled with 0x00.
 
-To convert from other formats to binary use objcopy. 
-
 The -l switch lists available memory types and sizes:
 
     name    size

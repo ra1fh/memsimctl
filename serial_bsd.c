@@ -28,7 +28,8 @@
 
 
 static int
-serial_setup(int fd) {
+serial_setup(int fd)
+{
 	struct termios tio;
 
 	if (tcgetattr(fd, &tio) < 0) {

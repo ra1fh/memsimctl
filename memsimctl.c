@@ -192,7 +192,7 @@ device_program(int fd, const struct device_config* conf)
 
 	snprintf(req, sizeof(req), "MC%c%c%03d%c%c00023\r\n",
 	         conf->memtype, conf->reset_polarity, conf->reset_time,
-		 conf->device_enable, conf->device_selftest);
+	         conf->device_enable, conf->device_selftest);
 	printf("config request:  %s", req);
 	if (buf_write(fd, (uint8_t*)req, sizeof(req) - 1) < 0) {
 		fprintf(stderr, "error: failed to write config request");

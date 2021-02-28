@@ -29,7 +29,8 @@
 extern int ioctl(int d, unsigned long request, ...);
 
 static int
-serial_setup(int fd) {
+serial_setup(int fd)
+{
 	struct termios2 tio;
 
 	if (ioctl(fd, TCGETS2, &tio) < 0) {

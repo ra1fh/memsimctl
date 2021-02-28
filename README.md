@@ -52,6 +52,12 @@ the device:
 
     MI110000000000
 
+Example that writes image.bin to the simulator, enables simulation and
+sends a 200ms negative reset pulse (for the reset to work the reset
+clip has to be connected):
+
+    memsimctl -e -r 200 -w image.bin
+
 ### Platform support
 
 memsimctl has been successfully tested on:

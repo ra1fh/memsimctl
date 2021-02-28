@@ -61,7 +61,5 @@ memsimctl has been successfully tested on:
  
 With limitation it also works on:
 
- * OpenBSD 6.8-current (x86_64)
+ * OpenBSD 6.8-current (x86_64), USB replug necessary after every command
  
-The problem is that the device has to replugged after every command as
-the FTDI driver or device in a non-working state afterwards.

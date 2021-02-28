@@ -1,3 +1,6 @@
+
+[![Build](https://github.com/ra1fh/memsimctl/actions/workflows/build.yml/badge.svg)](https://github.com/ra1fh/memsimctl/actions/workflows/build.yml)
+
 memsimctl
 =========
 

@@ -361,9 +361,23 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
+	if (!printlist && !getinfo && !filename) {
+		usage();
+		return EXIT_FAILURE;
+	}
+
 	if (printlist) {
 		memlist();
-		return 0;
+		return EXIT_SUCCESS;
+	}
+
+	if (getinfo) {
+		fd = serial_open(device);
+		if (fd < 0)
+			return EXIT_FAILURE;
+		res = device_info(fd);
+		close(fd);
+		return res;
 	}
 
 	if (memtype) {
@@ -397,15 +411,6 @@ main(int argc, char *argv[])
 			fprintf(stderr, "error: reset time out of range\n");
 			return EXIT_FAILURE;
 		}
-	}
-
-	if (getinfo) {
-		fd = serial_open(device);
-		if (fd < 0)
-			return EXIT_FAILURE;
-		res = device_info(fd);
-		close(fd);
-		return res;
 	}
 
 	if (filename) {

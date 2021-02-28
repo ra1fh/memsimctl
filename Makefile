@@ -19,7 +19,7 @@ SRCS+=		serial_linux.c
 OBJS+=		serial_linux.o
 endif
 
-CC=		cc
+CC?=		cc
 CFLAGS+=	-Wall -Wextra
 
 INSTALLDIR=	install -d

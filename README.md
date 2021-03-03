@@ -123,21 +123,21 @@ immediately. The reset pulse is only issued after data transmission.
       |+---------- reset polarity (P=positive, N=negative, 0=off)
       +----------- EPROM model selection
 
-The following EPROM models are defined:
-
-Model  | Size | Protocol Value
-------:|-----:|--------------:
-2764   |   0  |   8 KB
-27128  |   1  |  16 KB
-27256  |   2  |  32 KB
-27512  |   3  |  64 KB
-27010  |   4  | 128 KB
-27020  |   5  | 256 KB
-27040  |   6  | 512 KB
-
 The response repeats the request string with 'X' for the self-test:
 
     MC0P234DN00000\r\n
+
+The following EPROM models are defined:
+
+Model  | Protocol Value | Size
+------:|---------------:|-------:
+ 2764  |             0  |   8 KB
+27128  |             1  |  16 KB
+27256  |             2  |  32 KB
+27512  |             3  |  64 KB
+27010  |             4  | 128 KB
+27020  |             5  | 256 KB
+27040  |             6  | 512 KB
 
 #### MD
 

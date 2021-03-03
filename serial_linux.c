@@ -55,7 +55,8 @@ serial_setup(int fd)
 }
 
 const char*
-serial_device(const char *device) {
+serial_device(const char *device)
+{
 	if (device)
 		return device;
 	else

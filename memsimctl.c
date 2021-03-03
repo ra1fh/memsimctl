@@ -15,6 +15,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/stat.h>
+
 #include <errno.h>
 #include <poll.h>
 #include <stdint.h>
@@ -54,9 +56,10 @@ struct device_config {
 };
 
 static int
-read_file(const char *filename, off_t offset, uint8_t *mem, int memlen)
+read_file(const char *filename, unsigned int startaddr, uint8_t *mem, ssize_t memlen)
 {
 	FILE *f;
+	struct stat st;
 	off_t flen = 0;
 
 	if ((f = fopen(filename, "rb")) == NULL) {
@@ -64,43 +67,21 @@ read_file(const char *filename, off_t offset, uint8_t *mem, int memlen)
 		return -1;
 	}
 
-	if (fseeko(f, 0, SEEK_END) != 0) {
-		perror("fseeko end");
+	if (fstat(fileno(f), &st) != 0) {
+		perror("fstat");
+		fclose(f);
+		return -1;
+	}
+	flen = st.st_size;
+
+	if (flen + startaddr > memlen) {
+		fprintf(stderr, "error: memory exceeded (0x%04x + 0x%04jx > 0x%04lx)\n",
+		        startaddr, flen, memlen);
 		fclose(f);
 		return -1;
 	}
 
-	if ((flen = ftello(f)) < 0) {
-		perror("ftello end");
-		fclose(f);
-		return -1;
-	}
-
-	if (flen > memlen) {
-		fprintf(stderr, "error: file too large\n");
-		fclose(f);
-		return -1;
-	}
-
-	if (offset > 0) {
-		if (fseeko(f, offset, SEEK_SET) != 0) {
-			perror("fseeko offset");
-			fclose(f);
-			return -1;
-		}
-	} else if (offset == 0) {
-		if (fseeko(f, 0, SEEK_SET) != 0) {
-			perror("fseeko start");
-			fclose(f);
-			return -1;
-		}
-	} else {
-		fprintf(stderr, "error: negative offset\n");
-		fclose(f);
-		return -1;
-	}
-
-	if (fread(mem, sizeof(uint8_t), memlen, f) == 0) {
+	if (fread(mem + startaddr, sizeof(uint8_t), flen, f) == 0) {
 		perror("fread");
 		fclose(f);
 		return -1;
@@ -157,35 +138,41 @@ static void
 memlist()
 {
 	size_t i;
+	printf("supported memory configurations:\n\n");
 	printf("name    size\n");
 	for (i = 0; i < (sizeof(memtype_table) / sizeof(memtype_table[0])); i++) {
 		printf("%-5s   %3dK\n", memtype_table[i].name, memtype_table[i].size / 1024 );
 	}
+	printf("\n");
 }
 
 static int
-device_info(int fd)
+device_info(int fd, int verbose)
 {
 	char req[16+1];
 	char resp[16+1];
 
 	snprintf(req, sizeof(req), "MI000000000000\r\n");
-	printf("request:  %s", req);
+	if (verbose)
+		printf("request:  %s", req);
 	if (buf_write(fd, (uint8_t*)req, sizeof(req) - 1) < 0) {
 		fprintf(stderr, "error: failed to write request");
-		return EXIT_FAILURE;
+		return -1;
 	}
 	if (buf_read(fd, (uint8_t*)resp, 16, 5000) != 16) {
 		fprintf(stderr, "error: failed to read response\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 	resp[16] = '\0';
-	printf("response: %s", resp);
-	return EXIT_SUCCESS;
+	if (verbose)
+		printf("response: %s", resp);
+	printf("Version: %c\n", resp[2]);
+	printf("Memory: %c\n", resp[3]);
+	return 0;
 }
 
 static int
-device_program(int fd, const struct device_config* conf)
+device_config(int fd, const struct device_config* conf, int verbose)
 {
 	char req[16+1];
 	char resp[16+1];
@@ -193,48 +180,61 @@ device_program(int fd, const struct device_config* conf)
 	snprintf(req, sizeof(req), "MC%c%c%03d%c%c00023\r\n",
 	         conf->memtype, conf->reset_polarity, conf->reset_time,
 	         conf->device_enable, conf->device_selftest);
-	printf("config request:  %s", req);
+	if (verbose)
+		printf("config request:  %s", req);
 	if (buf_write(fd, (uint8_t*)req, sizeof(req) - 1) < 0) {
 		fprintf(stderr, "error: failed to write config request");
-		return EXIT_FAILURE;
+		return -1;
 	}
 	if (buf_read(fd, (uint8_t*)resp, 16, 5000) != 16) {
 		fprintf(stderr, "error: reading config response\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 	resp[16] = '\0';
-	printf("config response: %s", resp);
+	if (verbose)
+		printf("config response: %s", resp);
 	if (memcmp(req, resp, 8) != 0) {
 		fprintf(stderr, "error: config response mismatch\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
+	return 0;
+}
+
+static int
+device_data(int fd, const struct device_config* conf, int verbose)
+{
+	char req[16+1];
+	char resp[16+1];
 
 	snprintf(req, sizeof(req), "MD%04d00000058\r\n", conf->memsize / 1024 % 1000);
-	printf("data header: %s", req);
+	if (verbose)
+		printf("data header: %s", req);
 	if (buf_write(fd, (uint8_t*)req, sizeof(req) - 1) < 0)  {
 		fprintf(stderr, "error: writing header\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
-	printf("data bytes: %d\n", conf->memsize);
+	if (verbose)
+		printf("data bytes: %d\n", conf->memsize);
 	if (buf_write(fd, mem_buf, conf->memsize) < 0) {
 		fprintf(stderr, "error: writing data\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 	if (buf_read(fd, (uint8_t*)resp, 16, 15000) != 16) {
 		fprintf(stderr, "error: failed to read data response\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 	resp[16] = '\0';
-	printf("data response: %s", resp);
+	if (verbose)
+		printf("data response: %s", resp);
 	if (memcmp(req, resp, 8) != 0) {
 		fprintf(stderr, "error: data response mismatch\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
-	printf("transfer complete\n");
-	return EXIT_SUCCESS;
+	return 0;
 }
 
-const struct memtype_entry*
+
+static const struct memtype_entry*
 memtype_by_name(const char *memtype)
 {
 	size_t i;
@@ -247,87 +247,85 @@ memtype_by_name(const char *memtype)
 	return NULL;
 }
 
-const struct memtype_entry*
-memtype_by_size(int size)
+static int
+str_to_num(const char* str, const char* msg, int min, int max, int *num)
 {
-	size_t i;
+	long value;
+	char *endptr;
 
-	for (i = 0; i < (sizeof(memtype_table) / sizeof(memtype_table[0])); i++) {
-		if (memtype_table[i].size == size) {
-			return &memtype_table[i];
-		}
+	value = strtol(str, &endptr, 0);
+	if (endptr == str || *endptr != '\0') {
+		fprintf(stderr, "error: invalid %s\n", msg);
+		return -1;
 	}
-	return NULL;
-}
+	if (value < min || value > max) {
+		if (min >= 0 && max >= 0 && (min > 255 || max > 255))
+			fprintf(stderr, "error: %s needs to in the range 0x%04x - 0x%04x\n", msg, min, max);
+		else
+			fprintf(stderr, "error: %s needs to in the range %d - %d\n", msg, min, max);
 
-const struct memtype_entry*
-memtype_by_min_size(int size)
-{
-	size_t i;
-
-	for (i = 0; i < (sizeof(memtype_table) / sizeof(memtype_table[0])); i++) {
-		if (memtype_table[i].size >= size) {
-			return &memtype_table[i];
-		}
+		return -1;
 	}
-	return NULL;
+	*num = value;
+	return 0;
 }
 
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: memsimctl [-ehilp] [-d device] [-m memtype] [-o offset] [-r reset]\n");
-	fprintf(stderr, "                 [-w file]\n");
+	fprintf(stderr,
+	        "usage: memsimctl [-d device] [-s start] [-r reset] [-z memfill] -m memtype -w file\n");
+	fprintf(stderr, "       memsimctl [-d device] -i\n");
+	fprintf(stderr, "       memsimctl -h\n");
+	fprintf(stderr, "       memsimctl -L\n");
 	fprintf(stderr, "\n");
-	fprintf(stderr, "  -d device   serial device\n");
-	fprintf(stderr, "  -e          enable emulation\n");
-	fprintf(stderr, "  -h          print help\n");
-	fprintf(stderr, "  -i          identify device\n");
-	fprintf(stderr, "  -l          list memory types\n");
-	fprintf(stderr, "  -m memtype  select memory type\n");
-	fprintf(stderr, "  -o offset   specify input file offset\n");
-	fprintf(stderr, "  -p          reset pulse positive, default: negative\n");
-	fprintf(stderr, "  -r reset    reset pulse duration in ms, default: off\n");
-	fprintf(stderr, "  -w file     write file to emulator\n\n");
+	fprintf(stderr, "  -d device     serial device\n");
+	fprintf(stderr, "  -h            print help\n");
+	fprintf(stderr, "  -i            identify device\n");
+	fprintf(stderr, "  -L            list memory types\n");
+	fprintf(stderr, "  -m memtype    select memory type\n");
+	fprintf(stderr, "  -s start      start address where input file is loaded\n");
+	fprintf(stderr, "  -r reset      reset in ms, < 0 negative, > 0 positve, = 0 off\n");
+	fprintf(stderr, "  -v            verbose output\n");
+	fprintf(stderr, "  -w file       write file to emulator\n");
+	fprintf(stderr, "  -z memfill    fill value for unused memory\n\n");
 }
 
 int
 main(int argc, char *argv[])
 {
-	const struct memtype_entry *memtype_entry_ptr = NULL;
+	const struct memtype_entry *memtype_ptr = NULL;
 	int res;
 	int fd;
 	int ch;
-	long value;
-	char *endptr;
 	int filelen;
-	off_t fileoff = 0;
+	int resetval = -200;
+	int memfillval = 0;
+	int startaddrval = 0;
+	int verbose = 0;
 	struct device_config conf = {
-		.reset_time     =  0,
-		.reset_polarity = '0',
 		.device_enable  = 'D',
 		.device_selftest= 'N'
-		/* based on input: */
-		/* .memtype = ...  */
-		/* .memsize = ...  */
+		/* based on input:       */
+		/* .reset_time = ...     */
+		/* .reset_polarity = ... */
+		/* .memtype = ...        */
+		/* .memsize = ...        */
 	};
 	/* command line options */
-	char *device = NULL;
 	int getinfo = 0;
 	int printlist = 0;
-	int positive = 0;
+	char *device = NULL;
 	char *memtype = NULL;
-	char *offset = NULL;
 	char *reset = NULL;
+	char *startaddr = NULL;
 	char *filename = NULL;
+	char *memfill = NULL;
 
-	while ((ch = getopt(argc, argv, "d:ehilm:o:pr:w:")) != -1) {
+	while ((ch = getopt(argc, argv, "d:hiLm:r:s:vw:z:")) != -1) {
 		switch (ch) {
 		case 'd':
 			device = optarg;
-			break;
-		case 'e':
-			conf.device_enable = 'E';
 			break;
 		case 'h':
 			usage();
@@ -335,23 +333,26 @@ main(int argc, char *argv[])
 		case 'i':
 			getinfo = 1;
 			break;
-		case 'l':
+		case 'L':
 			printlist = 1;
 			break;
 		case 'm':
 			memtype = optarg;
 			break;
-		case 'o':
-			offset = optarg;
-			break;
-		case 'p':
-			positive = 1;
+		case 's':
+			startaddr = optarg;
 			break;
 		case 'r':
 			reset = optarg;
 			break;
+		case 'v':
+			verbose++;
+			break;
 		case 'w':
 			filename = optarg;
+			break;
+		case 'z':
+			memfill = optarg;
 			break;
 		case '?':
 			return EXIT_FAILURE;
@@ -360,11 +361,6 @@ main(int argc, char *argv[])
 
 	argc -= optind;
 	argv += optind;
-
-	if (!printlist && !getinfo && !filename) {
-		usage();
-		return EXIT_FAILURE;
-	}
 
 	if (printlist) {
 		memlist();
@@ -375,76 +371,87 @@ main(int argc, char *argv[])
 		fd = serial_open(device);
 		if (fd < 0)
 			return EXIT_FAILURE;
-		res = device_info(fd);
+		printf("Device: %s\n", serial_device(device));
+		res = device_info(fd, verbose);
 		close(fd);
-		return res;
+		return res == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 	}
 
-	if (memtype) {
-		memtype_entry_ptr = memtype_by_name(memtype);
-		if (!memtype_entry_ptr) {
-			fprintf(stderr, "error: unknown memory type \"%s\"\n", memtype);
-			return EXIT_FAILURE;
-		}
+	if (!filename) {
+		fprintf(stderr, "error: no operation specified\n");
+		return EXIT_FAILURE;
 	}
 
-	if (offset) {
-		fileoff = strtol(offset, &endptr, 0);
-		if (endptr == offset || *endptr != '\0') {
-			fprintf(stderr, "error: invalid offset\n");
+	if (!memtype) {
+		fprintf(stderr, "error: memtype required in write mode\n");
+		return EXIT_FAILURE;
+	}
+
+	memtype_ptr = memtype_by_name(memtype);
+	if (!memtype_ptr) {
+		fprintf(stderr, "error: unknown memory type \"%s\"\n", memtype);
+		return EXIT_FAILURE;
+	}
+	conf.memtype = memtype_ptr->type;
+	conf.memsize = memtype_ptr->size;
+
+	if (startaddr) {
+		if (str_to_num(startaddr, "start", 0, memtype_ptr->size - 1, &startaddrval) != 0)
+			return EXIT_FAILURE;
+	}
+
+	if (memfill) {
+		if (str_to_num(memfill, "memfill", 0, 255, &memfillval) != 0) {
 			return EXIT_FAILURE;
 		}
+		memset(mem_buf, memfillval, memtype_ptr->size);
 	}
 
 	if (reset) {
-		value = strtol(reset, &endptr, 0);
-		if (endptr == reset || *endptr != '\0') {
-			fprintf(stderr, "error: invalid reset time\n");
+		if (str_to_num(reset, "reset", -255, 255, &resetval) != 0)
 			return EXIT_FAILURE;
-		}
-		if (value == 0) {
-			/* keep the default */
-		} else if (value > 0 && value <= 255) {
-			conf.reset_polarity = positive ? 'P' : 'N';
-			conf.reset_time = value;
-		} else {
-			fprintf(stderr, "error: reset time out of range\n");
-			return EXIT_FAILURE;
-		}
 	}
 
-	if (filename) {
-		filelen = read_file(filename, fileoff, mem_buf, sizeof(mem_buf));
-		if (filelen < 0) {
-			return EXIT_FAILURE;
-		}
-		if (memtype_entry_ptr && filelen > memtype_entry_ptr->size) {
-			fprintf(stderr, "error: data exceeds selected memory type\n");
-			return EXIT_FAILURE;
-		}
-		if ((memtype_entry_ptr = memtype_by_size(filelen)) == NULL) {
-			if ((memtype_entry_ptr = memtype_by_min_size(filelen)) == NULL) {
-				fprintf(stderr, "error: no suitable memory type found\n");
-			}
-		}
-		if (!memtype_entry_ptr) {
-			fprintf(stderr, "error: no memory config found\n");
-			return EXIT_FAILURE;
-		}
-		conf.memtype = memtype_entry_ptr->type;
-		conf.memsize = memtype_entry_ptr->size;
+	if (resetval == 0) {
+		conf.reset_polarity = '0';
+		conf.reset_time = 0;
+	} else if (resetval < 0) {
+		conf.reset_polarity = 'N';
+		conf.reset_time = -resetval;
+	} else if (resetval > 0) {
+		conf.reset_polarity = 'P';
+		conf.reset_time = resetval;
+	}
 
-		printf("file size: %d\n", filelen);
-		printf("simulated size: %d\n", conf.memsize);
-		printf("selected config: %c\n", conf.memtype);
+	if (filename && memtype_ptr) {
+		if ((filelen = read_file(filename, startaddrval, mem_buf, memtype_ptr->size)) < 0) {
+			return EXIT_FAILURE;
+		}
+		printf("\n");
+		printf("%s: [0x%06x : 0x%06x] (0x%04x)\n", filename, startaddrval, startaddrval + filelen - 1,
+		       filelen);
+		printf("\n");
+		printf("EPROM:   %5s (0x%04x)\n", memtype_ptr->name, memtype_ptr->size);
+		printf("Fill:     0x%02x\n", memfillval);
+		if (conf.reset_time) {
+			printf("Reset:    %4d ms\n", (conf.reset_polarity == 'N' ? -conf.reset_time : conf.reset_time));
+		} else {
+			printf("Reset:     off\n");
+		}
 
 		fd = serial_open(device);
 		if (fd < 0)
 			return EXIT_FAILURE;
-		res = device_program(fd, &conf);
+		res = device_config(fd, &conf, verbose);
+		res += device_data(fd, &conf, verbose);
 		close(fd);
-		return res;
+		if (res == 0)
+			printf("Transfer:   OK (0x%04x)\n\n", conf.memsize);
+		else
+			printf("Transfer: FAILED\n\n");
+		return res == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 	}
 
-	return EXIT_SUCCESS;
+	/* not reached */
+	return EXIT_FAILURE;
 }

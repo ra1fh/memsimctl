@@ -53,7 +53,8 @@ serial_setup(int fd)
 }
 
 const char*
-serial_device(const char *device) {
+serial_device(const char *device)
+{
 	if (device)
 		return device;
 	else
@@ -68,7 +69,6 @@ serial_open(const char *device)
 	if (!device) {
 		device = SERIAL_DEFAULT;
 	}
-	printf("opening device: %s\n", device);
 
 	fd = open(device, O_RDWR);
 	if (fd < 0) {

@@ -17,11 +17,13 @@ Command line tool to control
 ### Usage
 
     usage: memsimctl [-d device] [-s start] [-r reset] [-z memfill] -m memtype -w file
+           memsimctl [-d device] -m memtype -D
            memsimctl [-d device] -i
            memsimctl -h
            memsimctl -L
     
       -d device     serial device
+      -D            disable buffers
       -h            print help
       -i            identify device
       -L            list memory types

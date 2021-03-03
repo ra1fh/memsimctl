@@ -273,13 +273,14 @@ str_to_num(const char* str, const char* msg, int min, int max, int *num)
 static void
 usage(void)
 {
-	fprintf(stderr,
-	        "usage: memsimctl [-d device] [-s start] [-r reset] [-z memfill] -m memtype -w file\n");
+	fprintf(stderr, "usage: memsimctl [-d device] [-s start] [-r reset] [-z memfill] -m memtype -w file\n");
+	fprintf(stderr, "       memsimctl [-d device] -m memtype -D\n");
 	fprintf(stderr, "       memsimctl [-d device] -i\n");
 	fprintf(stderr, "       memsimctl -h\n");
 	fprintf(stderr, "       memsimctl -L\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "  -d device     serial device\n");
+	fprintf(stderr, "  -D            disable buffers\n");
 	fprintf(stderr, "  -h            print help\n");
 	fprintf(stderr, "  -i            identify device\n");
 	fprintf(stderr, "  -L            list memory types\n");
@@ -315,6 +316,7 @@ main(int argc, char *argv[])
 	/* command line options */
 	int getinfo = 0;
 	int printlist = 0;
+	int disable = 0;
 	char *device = NULL;
 	char *memtype = NULL;
 	char *reset = NULL;
@@ -322,10 +324,13 @@ main(int argc, char *argv[])
 	char *filename = NULL;
 	char *memfill = NULL;
 
-	while ((ch = getopt(argc, argv, "d:hiLm:r:s:vw:z:")) != -1) {
+	while ((ch = getopt(argc, argv, "d:DhiLm:r:s:vw:z:")) != -1) {
 		switch (ch) {
 		case 'd':
 			device = optarg;
+			break;
+		case 'D':
+			disable = 1;
 			break;
 		case 'h':
 			usage();
@@ -377,13 +382,8 @@ main(int argc, char *argv[])
 		return res == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 	}
 
-	if (!filename) {
-		fprintf(stderr, "error: no operation specified\n");
-		return EXIT_FAILURE;
-	}
-
 	if (!memtype) {
-		fprintf(stderr, "error: memtype required in write mode\n");
+		fprintf(stderr, "error: memtype required for write mode and buffer disable\n");
 		return EXIT_FAILURE;
 	}
 
@@ -394,6 +394,24 @@ main(int argc, char *argv[])
 	}
 	conf.memtype = memtype_ptr->type;
 	conf.memsize = memtype_ptr->size;
+
+	if (disable) {
+		fd = serial_open(device);
+		if (fd < 0)
+			return EXIT_FAILURE;
+		conf.reset_time = 0;
+		conf.reset_polarity = '0';
+		conf.device_enable = 'D';
+		conf.device_selftest = 'N';
+		res = device_config(fd, &conf, verbose);
+		close(fd);
+		return res == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+	}
+
+	if (!filename) {
+		fprintf(stderr, "error: no operation specified\n");
+		return EXIT_FAILURE;
+	}
 
 	if (startaddr) {
 		if (str_to_num(startaddr, "start", 0, memtype_ptr->size - 1, &startaddrval) != 0)

@@ -85,10 +85,7 @@ memsimctl has been successfully tested on:
 
  * Fedora 33 (x86_64)
  * Ubuntu 20.04 (x86_64)
-
-With limitation it also works on:
-
- * OpenBSD 6.8-current (x86_64), USB re-plug necessary after every command
+ * OpenBSD 6.8-current (x86_64)
 
 ### Protocol Details
 

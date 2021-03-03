@@ -75,6 +75,11 @@ serial_open(const char *device)
 		perror("open");
 		return -1;
 	}
+	if (tcflush(fd, TCIOFLUSH) != 0) {
+		perror("tcflush");
+		close(fd);
+		return -1;
+	}
 	if (serial_setup(fd) < 0) {
 		close(fd);
 		return -1;

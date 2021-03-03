@@ -54,6 +54,14 @@ serial_setup(int fd)
 	return 0;
 }
 
+const char*
+serial_device(const char *device) {
+	if (device)
+		return device;
+	else
+		return SERIAL_DEFAULT;
+}
+
 int
 serial_open(const char *device)
 {
@@ -62,7 +70,6 @@ serial_open(const char *device)
 	if (!device) {
 		device = SERIAL_DEFAULT;
 	}
-	printf("opening device: %s\n", device);
 
 	fd = open(device, O_RDWR);
 	if (fd < 0) {

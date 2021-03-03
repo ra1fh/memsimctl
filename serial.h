@@ -19,5 +19,6 @@
 #define SERIAL_H
 
 int serial_open(const char *device);
+const char* serial_device(const char *device);
 
 #endif

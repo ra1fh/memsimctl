@@ -64,9 +64,9 @@ The -i option sends an identify command to the device. The response
 indicates the version and memory size of the device:
 
     $ memsimctl -i
-    Device: /dev/ttyUSB0
+    Device:  /dev/ttyUSB0
     Version: 1
-    Memory: 1
+    Memory:  1
 
 ## Protocol Details
 

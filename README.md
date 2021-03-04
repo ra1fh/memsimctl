@@ -93,17 +93,17 @@ The MC command is the configuration command that sets up various
 parameters of the memSIM2 device. The buffer control is effective
 immediately. The reset pulse is only issued after data transmission.
 
-    MC0P234DN00000\r\n
+    MC0P123EN000FF\r\n
       ||^^^||
       || | |+----- presumably selftest (N=disable, unknown how to enable)
       || | +------ buffer control (D=disable, E=enable)
-      || +-------- reset pulse time 234ms (255ms max)
+      || +-------- reset pulse time 123ms (255ms max)
       |+---------- reset polarity (P=positive, N=negative, 0=off)
       +----------- EPROM model selection
 
 The response repeats the request string with 'X' for the self-test:
 
-    MC0P234DN00000\r\n
+    MC0P123EX000FF\r\n
 
 The following EPROM models are defined:
 
@@ -121,7 +121,7 @@ Model  | Protocol Value | Size
 
 The MD command starts the data transmission to the memSIM2 device.
 
-    MD051200000000\r\n
+    MD0512000000FF\r\n
        ^^^
         |
         +---------- data in KB
@@ -129,7 +129,7 @@ The MD command starts the data transmission to the memSIM2 device.
 Following the header, the data is being transmitted in binary. The
 device acknowledges successful transmission with:
 
-    MD051200000000\r\n
+    MD0512000000FF\r\n
 
 After data transmission, the buffers are enabled immediately,
 indicated by the "READY" LED. The reset pulse will be triggered as

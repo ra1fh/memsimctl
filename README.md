@@ -5,8 +5,8 @@ Command line tool to control
 
 ## Building
 
-    $ (g)make
-    $ (g)make install
+    $ make
+    $ make install
 
 ## Platform Support
 

@@ -9,15 +9,10 @@ SRCS=		memsimctl.c
 OBJS=		memsimctl.o
 HDRS=		serial.h
 
-ifeq ($(shell uname -s), OpenBSD)
-SRCS+=		serial_bsd.c
-OBJS+=		serial_bsd.o
-endif
+SYSTEM!=	uname -s | tr 'A-Z' 'a-z' | sed -E 's/(open|free)//g'
 
-ifeq ($(shell uname -s), Linux)
-SRCS+=		serial_linux.c
-OBJS+=		serial_linux.o
-endif
+SRCS+=		serial_$(SYSTEM).c
+OBJS+=		serial_$(SYSTEM).o
 
 CC?=		cc
 CFLAGS+=	-Wall -Wextra
@@ -33,7 +28,7 @@ clean:
 
 install: $(PROG)
 	$(INSTALLDIR) $(DESTDIR)$(PREFIX)/bin
-	$(INSTALLBIN) $(PROG) $(DESTDIST)/$(PREFIX)/bin/$(PROG)
+	$(INSTALLBIN) $(PROG) $(DESTDIST)$(PREFIX)/bin/$(PROG)
 
 style:
 	astyle --options=astylerc $(SRCS) $(HDRS)

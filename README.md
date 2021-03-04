@@ -36,9 +36,9 @@ memsimctl has been successfully tested on:
       -w file       write file to emulator
       -z memfill    fill value for unused memory
 
-Example that writes image.bin to the simulator, enables simulation
-buffers and sends a 200ms negative reset pulse (for the reset to work
-the reset clip has to be connected):
+The following example demonstrates a few command line options to send
+a 4K image.bin to the simulator in 2764 mode with a 100ms negative
+reset pulse:
 
     $ memsimctl -m 2764 -r -100 -s 0x1000 -z 0xff -w image.bin
     

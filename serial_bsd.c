@@ -36,16 +36,10 @@ serial_setup(int fd)
 		perror("tcgetattr");
 		return -1;
 	}
-	tio.c_iflag &= ~(IGNBRK|BRKINT|IGNPAR|PARMRK
-	                 |INPCK|ISTRIP|INLCR|IGNCR
-	                 |ICRNL|IXON);
+	cfmakeraw(&tio);
 	tio.c_iflag |= (IGNBRK|IGNPAR);
-	tio.c_oflag &= ~OPOST;
-	tio.c_lflag &= ~(ECHO|ECHONL|ISIG|ICANON|IEXTEN);
-	tio.c_cflag &= ~(CSIZE|PARENB|PARODD);
-	tio.c_cflag |= CS8|CREAD|CLOCAL;
 	cfsetspeed(&tio, SERIAL_SPEED);
-	if (tcsetattr(fd, TCSANOW, &tio) < 0) {
+	if (tcsetattr(fd, TCSAFLUSH, &tio) < 0) {
 		perror("tcsetattr");
 		return -1;
 	}
@@ -73,11 +67,6 @@ serial_open(const char *device)
 	fd = open(device, O_RDWR);
 	if (fd < 0) {
 		perror("open");
-		return -1;
-	}
-	if (tcflush(fd, TCIOFLUSH) != 0) {
-		perror("tcflush");
-		close(fd);
 		return -1;
 	}
 	if (serial_setup(fd) < 0) {

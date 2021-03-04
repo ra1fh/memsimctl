@@ -50,7 +50,6 @@ struct device_config {
 	short int reset_time;
 	char reset_polarity;
 	int device_enable;
-	int device_selftest;
 	char memtype;
 	int memsize;
 };
@@ -147,7 +146,7 @@ memlist()
 }
 
 static int
-device_info(int fd, int verbose)
+device_info(int fd, const char* device, int verbose)
 {
 	char req[16+1];
 	char resp[16+1];
@@ -166,8 +165,9 @@ device_info(int fd, int verbose)
 	resp[16] = '\0';
 	if (verbose)
 		printf("response: %s", resp);
+	printf("Device:  %s\n", device);
 	printf("Version: %c\n", resp[2]);
-	printf("Memory: %c\n", resp[3]);
+	printf("Memory:  %c\n", resp[3]);
 	return 0;
 }
 
@@ -177,9 +177,9 @@ device_config(int fd, const struct device_config* conf, int verbose)
 	char req[16+1];
 	char resp[16+1];
 
-	snprintf(req, sizeof(req), "MC%c%c%03d%c%c00023\r\n",
+	snprintf(req, sizeof(req), "MC%c%c%03d%cN000FF\r\n",
 	         conf->memtype, conf->reset_polarity, conf->reset_time,
-	         conf->device_enable, conf->device_selftest);
+	         conf->device_enable);
 	if (verbose)
 		printf("config request:  %s", req);
 	if (buf_write(fd, (uint8_t*)req, sizeof(req) - 1) < 0) {
@@ -206,15 +206,15 @@ device_data(int fd, const struct device_config* conf, int verbose)
 	char req[16+1];
 	char resp[16+1];
 
-	snprintf(req, sizeof(req), "MD%04d00000058\r\n", conf->memsize / 1024 % 1000);
+	snprintf(req, sizeof(req), "MD%04d000000FF\r\n", conf->memsize / 1024 % 1000);
 	if (verbose)
-		printf("data header: %s", req);
+		printf("data header:     %s", req);
 	if (buf_write(fd, (uint8_t*)req, sizeof(req) - 1) < 0)  {
 		fprintf(stderr, "error: writing header\n");
 		return -1;
 	}
 	if (verbose)
-		printf("data bytes: %d\n", conf->memsize);
+		printf("data bytes:      %d\n", conf->memsize);
 	if (buf_write(fd, mem_buf, conf->memsize) < 0) {
 		fprintf(stderr, "error: writing data\n");
 		return -1;
@@ -225,7 +225,7 @@ device_data(int fd, const struct device_config* conf, int verbose)
 	}
 	resp[16] = '\0';
 	if (verbose)
-		printf("data response: %s", resp);
+		printf("data response:   %s", resp);
 	if (memcmp(req, resp, 8) != 0) {
 		fprintf(stderr, "error: data response mismatch\n");
 		return -1;
@@ -273,7 +273,8 @@ str_to_num(const char* str, const char* msg, int min, int max, int *num)
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: memsimctl [-d device] [-s start] [-r reset] [-z memfill] -m memtype -w file\n");
+	fprintf(stderr,
+	        "usage: memsimctl [-d device] [-s start] [-r reset] [-z memfill] -m memtype -w file\n");
 	fprintf(stderr, "       memsimctl [-d device] -m memtype -D\n");
 	fprintf(stderr, "       memsimctl [-d device] -i\n");
 	fprintf(stderr, "       memsimctl -h\n");
@@ -304,15 +305,7 @@ main(int argc, char *argv[])
 	int memfillval = 0;
 	int startaddrval = 0;
 	int verbose = 0;
-	struct device_config conf = {
-		.device_enable  = 'D',
-		.device_selftest= 'N'
-		/* based on input:       */
-		/* .reset_time = ...     */
-		/* .reset_polarity = ... */
-		/* .memtype = ...        */
-		/* .memsize = ...        */
-	};
+	struct device_config conf;
 	/* command line options */
 	int getinfo = 0;
 	int printlist = 0;
@@ -376,8 +369,7 @@ main(int argc, char *argv[])
 		fd = serial_open(device);
 		if (fd < 0)
 			return EXIT_FAILURE;
-		printf("Device: %s\n", serial_device(device));
-		res = device_info(fd, verbose);
+		res = device_info(fd, serial_device(device), verbose);
 		close(fd);
 		return res == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 	}
@@ -402,7 +394,6 @@ main(int argc, char *argv[])
 		conf.reset_time = 0;
 		conf.reset_polarity = '0';
 		conf.device_enable = 'D';
-		conf.device_selftest = 'N';
 		res = device_config(fd, &conf, verbose);
 		close(fd);
 		return res == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
@@ -440,6 +431,7 @@ main(int argc, char *argv[])
 		conf.reset_polarity = 'P';
 		conf.reset_time = resetval;
 	}
+	conf.device_enable = 'E';
 
 	if (filename && memtype_ptr) {
 		if ((filelen = read_file(filename, startaddrval, mem_buf, memtype_ptr->size)) < 0) {
@@ -454,7 +446,7 @@ main(int argc, char *argv[])
 		if (conf.reset_time) {
 			printf("Reset:    %4d ms\n", (conf.reset_polarity == 'N' ? -conf.reset_time : conf.reset_time));
 		} else {
-			printf("Reset:     off\n");
+			printf("Reset:     OFF\n");
 		}
 
 		fd = serial_open(device);

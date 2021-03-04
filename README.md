@@ -1,20 +1,22 @@
-
-[![Build](https://github.com/ra1fh/memsimctl/actions/workflows/build.yml/badge.svg)](https://github.com/ra1fh/memsimctl/actions/workflows/build.yml)
-
-memsimctl
-=========
-
-### About
+# memsimctl [![Build](https://github.com/ra1fh/memsimctl/actions/workflows/build.yml/badge.svg)](https://github.com/ra1fh/memsimctl/actions/workflows/build.yml)
 
 Command line tool to control
 [memSIM2 EPROM simulator](http://momik.pl/memsim.htm).
 
-### Building
+## Building
 
     $ (g)make
     $ (g)make install
 
-### Usage
+## Platform Support
+
+memsimctl has been successfully tested on:
+
+ * Fedora 33 (x86_64)
+ * Ubuntu 20.04 (x86_64)
+ * OpenBSD 6.8/6.9 (x86_64)
+
+## Usage
 
     usage: memsimctl [-d device] [-s start] [-r reset] [-z memfill] -m memtype -w file
            memsimctl [-d device] -m memtype -D
@@ -34,67 +36,44 @@ Command line tool to control
       -w file       write file to emulator
       -z memfill    fill value for unused memory
 
+Example that writes image.bin to the simulator, enables simulation
+buffers and sends a 200ms negative reset pulse (for the reset to work
+the reset clip has to be connected):
+
+    $ memsimctl -m 2764 -r -100 -s 0x1000 -z 0xff -w image.bin
+    
+    image.bin: [0x001000 : 0x001fff] (0x1000)
+    
+    EPROM:    2764 (0x2000)
+    Fill:     0xff
+    Reset:    -100 ms
+    Transfer:   OK (0x2000)
+
 The input file (-w) has to be in raw binary format. The specified
 start address (-s) determines where the input is mapped into the
-simulator memory.  If the input file is smaller than the selected
-memory type, the remaining memory will be filled with 0x00 or the
-specified fill value (-z).
+simulator memory.  The remaining memory will be filled with 0x00 or
+the specified fill value (-z).
 
-The -L switch lists available memory types and sizes:
+Enabling the output buffers is done implicitly when a new memory image
+has been transmitted. The -D option can be used to disable output
+buffers.
 
-    name    size
-    2764      8K
-    27128    16K
-    27256    32K
-    27512    64K
-    27010   128K
-    27020   256K
-    27040   512K
+The -L option lists available memory types and sizes.
 
-The -i switch sends an identify command to the device
-("MI000..."). The response indicates the version and memory size of
-the device:
+The -i option sends an identify command to the device. The response
+indicates the version and memory size of the device:
 
     $ memsimctl -i
     Device: /dev/ttyUSB0
     Version: 1
     Memory: 1
 
-Example that writes image.bin to the simulator, enables simulation
-buffers and sends a 200ms positive reset pulse (for the reset to work
-the reset clip has to be connected):
-
-    $ memsimctl -r 200 -m 2764 -w image.bin
-    
-    image.bin: [0x000000 : 0x0007ff] (0x0800)
-    
-    EPROM:    2764 (0x2000)
-    Fill:     0x00
-    Reset:     200 ms
-    Transfer:   OK (0x2000)
-
-### Status LEDs
-
-The memsim2 device has three LEDs:
-
- * Green "TRANSMISSION": indicates USB transfer
- * Yellow "READY": indicates buffer enabled (off when disabled)
- * Red "RUN": indicates memory access from the target device
-
-### Platform Support
-
-memsimctl has been successfully tested on:
-
- * Fedora 33 (x86_64)
- * Ubuntu 20.04 (x86_64)
- * OpenBSD 6.8-current (x86_64)
-
-### Protocol Details
+## Protocol Details
 
 The following information has be gathered by observing the USB
 communication. The description is likely incomplete.
 
-#### MI
+### MI
 
 The MI command can be used to identify the device and the version of
 the device:
@@ -108,7 +87,7 @@ The device responds with:
 The two digits seem to indicate version '1' and memory size '1'
 (512KB).
 
-#### MC
+### MC
 
 The MC command is the configuration command that sets up various
 parameters of the memSIM2 device. The buffer control is effective
@@ -138,7 +117,7 @@ Model  | Protocol Value | Size
 27020  |             5  | 256 KB
 27040  |             6  | 512 KB
 
-#### MD
+### MD
 
 The MD command starts the data transmission to the memSIM2 device.
 

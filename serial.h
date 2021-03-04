@@ -18,7 +18,7 @@
 #ifndef SERIAL_H
 #define SERIAL_H
 
-int serial_open(const char *device);
+int serial_open(const char *device, int speed);
 const char* serial_device(const char *device);
 
 #endif

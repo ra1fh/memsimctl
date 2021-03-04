@@ -29,6 +29,7 @@
 
 #define KB 1024
 #define MEMBUFSIZE (512 * KB)
+#define SERIAL_SPEED 460800
 
 static uint8_t mem_buf[MEMBUFSIZE];
 
@@ -366,7 +367,7 @@ main(int argc, char *argv[])
 	}
 
 	if (getinfo) {
-		fd = serial_open(device);
+		fd = serial_open(device, SERIAL_SPEED);
 		if (fd < 0)
 			return EXIT_FAILURE;
 		res = device_info(fd, serial_device(device), verbose);
@@ -388,7 +389,7 @@ main(int argc, char *argv[])
 	conf.memsize = memtype_ptr->size;
 
 	if (disable) {
-		fd = serial_open(device);
+		fd = serial_open(device, SERIAL_SPEED);
 		if (fd < 0)
 			return EXIT_FAILURE;
 		conf.reset_time = 0;
@@ -449,7 +450,7 @@ main(int argc, char *argv[])
 			printf("Reset:     OFF\n");
 		}
 
-		fd = serial_open(device);
+		fd = serial_open(device, SERIAL_SPEED);
 		if (fd < 0)
 			return EXIT_FAILURE;
 		res = device_config(fd, &conf, verbose);

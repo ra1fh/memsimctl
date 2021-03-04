@@ -23,13 +23,12 @@
 
 #include "serial.h"
 
-#define SERIAL_SPEED 460800
 #define SERIAL_DEFAULT "/dev/ttyUSB0"
 
 extern int ioctl(int d, unsigned long request, ...);
 
 static int
-serial_setup(int fd)
+serial_setup(int fd, int speed)
 {
 	struct termios2 tio;
 
@@ -45,8 +44,8 @@ serial_setup(int fd)
 	tio.c_lflag &= ~(ECHO|ECHONL|ISIG|ICANON|IEXTEN);
 	tio.c_cflag &= ~(CSIZE|PARENB|PARODD|CBAUD);
 	tio.c_cflag |= (CS8|CREAD|BOTHER);
-	tio.c_ispeed = SERIAL_SPEED;
-	tio.c_ospeed = SERIAL_SPEED;
+	tio.c_ispeed = speed;
+	tio.c_ospeed = speed;
 	if (ioctl(fd, TCSETS2, &tio) < 0) {
 		perror("ioctl TCSETS2");
 		return -1;
@@ -64,7 +63,7 @@ serial_device(const char *device)
 }
 
 int
-serial_open(const char *device)
+serial_open(const char *device, int speed)
 {
 	int fd;
 
@@ -77,7 +76,7 @@ serial_open(const char *device)
 		perror("open");
 		return -1;
 	}
-	if (serial_setup(fd) < 0) {
+	if (serial_setup(fd, speed) < 0) {
 		close(fd);
 		return -1;
 	}

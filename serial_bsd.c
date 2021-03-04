@@ -23,12 +23,10 @@
 
 #include "serial.h"
 
-#define SERIAL_SPEED 460800
 #define SERIAL_DEFAULT "/dev/cuaU0"
 
-
 static int
-serial_setup(int fd)
+serial_setup(int fd, int speed)
 {
 	struct termios tio;
 
@@ -38,7 +36,7 @@ serial_setup(int fd)
 	}
 	cfmakeraw(&tio);
 	tio.c_iflag |= (IGNBRK|IGNPAR);
-	cfsetspeed(&tio, SERIAL_SPEED);
+	cfsetspeed(&tio, speed);
 	if (tcsetattr(fd, TCSAFLUSH, &tio) < 0) {
 		perror("tcsetattr");
 		return -1;
@@ -56,7 +54,7 @@ serial_device(const char *device)
 }
 
 int
-serial_open(const char *device)
+serial_open(const char *device, int speed)
 {
 	int fd;
 
@@ -69,7 +67,7 @@ serial_open(const char *device)
 		perror("open");
 		return -1;
 	}
-	if (serial_setup(fd) < 0) {
+	if (serial_setup(fd, speed) < 0) {
 		close(fd);
 		return -1;
 	}

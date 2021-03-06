@@ -15,10 +15,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/limits.h>
 #include <sys/stat.h>
 
 #include <errno.h>
+#include <limits.h>
 #include <poll.h>
 #include <stdint.h>
 #include <stdio.h>

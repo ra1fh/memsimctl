@@ -37,7 +37,7 @@ static uint8_t mem_buf[MEMBUFSIZE];
 struct memtype_entry {
 	const char *name;
 	const char type;
-	const int size;
+	const unsigned int size;
 } memtype_table[] = {
 	{ "2764",  '0',   8 * KB },
 	{ "27128", '1',  16 * KB },
@@ -62,11 +62,11 @@ enum {
 };
 
 static int
-read_file(const char *filename, unsigned int startaddr, uint8_t *mem, ssize_t memlen)
+read_file(const char *filename, unsigned int startaddr, uint8_t *mem, unsigned int memlen)
 {
 	FILE *f;
 	struct stat st;
-	off_t flen = 0;
+	unsigned long long flen = 0;
 
 	if ((f = fopen(filename, "rb")) == NULL) {
 		fprintf(stderr, "error: failed to open %s: %s\n", filename, strerror(errno));
@@ -81,7 +81,7 @@ read_file(const char *filename, unsigned int startaddr, uint8_t *mem, ssize_t me
 	flen = st.st_size;
 
 	if (flen + startaddr > memlen) {
-		fprintf(stderr, "error: memory exceeded (0x%04x + 0x%04jx > 0x%04lx)\n",
+		fprintf(stderr, "error: memory exceeded (0x%04x + 0x%04llx > 0x%04x)\n",
 		        startaddr, flen, memlen);
 		fclose(f);
 		return -1;
@@ -359,7 +359,7 @@ main(int argc, char *argv[])
 			}
 			break;
 		case 's':
-			if (str_to_num(optarg, "startaddr", 0, INT_MAX, &startaddr) != 0)
+			if (str_to_num(optarg, "startaddr", 0, MEMBUFSIZE - 1, &startaddr) != 0)
 				return EXIT_FAILURE;
 			break;
 		case 'r':

@@ -21,12 +21,14 @@ memsimctl has been successfully tested on:
 
     usage: memsimctl [-d device] [-s start] [-r reset] [-z memfill] -m memtype -w file
            memsimctl [-d device] -m memtype -D
+           memsimctl [-d device] -m memtype -E
            memsimctl [-d device] -i
            memsimctl -h
            memsimctl -L
     
       -d device     serial device
       -D            disable buffers
+      -E            enable buffers
       -h            print help
       -i            identify device
       -L            list memory types
@@ -43,12 +45,10 @@ reset pulse:
 
     $ memsimctl -m 2764 -r -100 -s 0x1000 -z 0xff -w image.bin
     
-    image.bin: [0x001000 : 0x001fff] (0x1000)
+    [0x01000 : 0x01fff] (0x01000) image.bin
+    [0x00000 : 0x01fff] (0x02000) EPROM 2764 0xff -100ms
     
-    EPROM:    2764 (0x2000)
-    Fill:     0xff
-    Reset:    -100 ms
-    Transfer:   OK (0x2000)
+    Transfer:   OK
 
 The input file (-w) has to be in raw binary format. The specified
 start address (-s) determines where the input is mapped into the

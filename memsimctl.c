@@ -15,6 +15,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/limits.h>
 #include <sys/stat.h>
 
 #include <errno.h>
@@ -47,12 +48,17 @@ struct memtype_entry {
 	{ "27040", '6', 512 * KB },
 };
 
-struct device_config {
-	short int reset_time;
-	char reset_polarity;
-	int device_enable;
-	char memtype;
-	int memsize;
+enum {
+	DEVICE_DISABLE = 0,
+	DEVICE_ENABLE  = 1
+};
+
+enum {
+	CMD_DISABLE  = 0x01,
+	CMD_ENABLE   = 0x02,
+	CMD_IDENTIFY = 0x04,
+	CMD_LIST     = 0x08,
+	CMD_WRITE    = 0x10,
 };
 
 static int
@@ -147,7 +153,7 @@ memlist()
 }
 
 static int
-device_info(int fd, const char* device, int verbose)
+device_identify(int fd, const char* device, int verbose)
 {
 	char req[16+1];
 	char resp[16+1];
@@ -173,14 +179,26 @@ device_info(int fd, const char* device, int verbose)
 }
 
 static int
-device_config(int fd, const struct device_config* conf, int verbose)
+device_config(int fd, const char memtype, const int reset, const char enable, const int verbose)
 {
 	char req[16+1];
 	char resp[16+1];
+	char reset_polarity;
+	int reset_time;
+
+	reset_polarity = '0';
+	reset_time = 0;
+	if (reset < 0) {
+		reset_polarity = 'N';
+		reset_time = -reset;
+	} else if (reset > 0) {
+		reset_polarity = 'P';
+		reset_time = reset;
+	}
 
 	snprintf(req, sizeof(req), "MC%c%c%03d%cN000FF\r\n",
-	         conf->memtype, conf->reset_polarity, conf->reset_time,
-	         conf->device_enable);
+	         memtype, reset_polarity, reset_time,
+	         enable == DEVICE_ENABLE ? 'E': 'D');
 	if (verbose)
 		printf("config request:  %s", req);
 	if (buf_write(fd, (uint8_t*)req, sizeof(req) - 1) < 0) {
@@ -202,12 +220,12 @@ device_config(int fd, const struct device_config* conf, int verbose)
 }
 
 static int
-device_data(int fd, const struct device_config* conf, int verbose)
+device_data(int fd, int memsize, int verbose)
 {
 	char req[16+1];
 	char resp[16+1];
 
-	snprintf(req, sizeof(req), "MD%04d000000FF\r\n", conf->memsize / 1024 % 1000);
+	snprintf(req, sizeof(req), "MD%04d000000FF\r\n", memsize / 1024 % 1000);
 	if (verbose)
 		printf("data header:     %s", req);
 	if (buf_write(fd, (uint8_t*)req, sizeof(req) - 1) < 0)  {
@@ -215,8 +233,8 @@ device_data(int fd, const struct device_config* conf, int verbose)
 		return -1;
 	}
 	if (verbose)
-		printf("data bytes:      %d\n", conf->memsize);
-	if (buf_write(fd, mem_buf, conf->memsize) < 0) {
+		printf("data bytes:      %d\n", memsize);
+	if (buf_write(fd, mem_buf, memsize) < 0) {
 		fprintf(stderr, "error: writing data\n");
 		return -1;
 	}
@@ -275,83 +293,89 @@ static void
 usage(void)
 {
 	fprintf(stderr,
-	        "usage: memsimctl [-d device] [-s start] [-r reset] [-z memfill] -m memtype -w file\n");
-	fprintf(stderr, "       memsimctl [-d device] -m memtype -D\n");
-	fprintf(stderr, "       memsimctl [-d device] -i\n");
-	fprintf(stderr, "       memsimctl -h\n");
-	fprintf(stderr, "       memsimctl -L\n");
-	fprintf(stderr, "\n");
-	fprintf(stderr, "  -d device     serial device\n");
-	fprintf(stderr, "  -D            disable buffers\n");
-	fprintf(stderr, "  -h            print help\n");
-	fprintf(stderr, "  -i            identify device\n");
-	fprintf(stderr, "  -L            list memory types\n");
-	fprintf(stderr, "  -m memtype    select memory type\n");
-	fprintf(stderr, "  -s start      start address where input file is loaded\n");
-	fprintf(stderr, "  -r reset      reset in ms, < 0 negative, > 0 positve, = 0 off\n");
-	fprintf(stderr, "  -v            verbose output\n");
-	fprintf(stderr, "  -w file       write file to emulator\n");
-	fprintf(stderr, "  -z memfill    fill value for unused memory\n\n");
+	        "usage: memsimctl [-d device] [-s start] [-r reset] [-z memfill] -m memtype -w file\n"
+	        "       memsimctl [-d device] -m memtype -D\n"
+	        "       memsimctl [-d device] -m memtype -E\n"
+	        "       memsimctl [-d device] -i\n"
+	        "       memsimctl -L\n"
+	        "       memsimctl -h\n"
+	        "\n"
+	        "  -d device     serial device\n"
+	        "  -D            disable buffers\n"
+	        "  -E            enable buffers\n"
+	        "  -h            print help\n"
+	        "  -i            identify device\n"
+	        "  -L            list memory types\n"
+	        "  -m memtype    select memory type\n"
+	        "  -s start      start address where input file is loaded\n"
+	        "  -r reset      reset in ms, < 0 negative, > 0 positve, = 0 off\n"
+	        "  -v            verbose output\n"
+	        "  -w file       write file to emulator\n"
+	        "  -z memfill    fill value for unused memory\n\n");
 }
 
 int
 main(int argc, char *argv[])
 {
-	const struct memtype_entry *memtype_ptr = NULL;
+	const struct memtype_entry *memtype;
 	int res;
 	int fd;
 	int ch;
 	int filelen;
-	int resetval = -200;
-	int memfillval = 0;
-	int startaddrval = 0;
-	int verbose = 0;
-	struct device_config conf;
 	/* command line options */
-	int getinfo = 0;
-	int printlist = 0;
-	int disable = 0;
+	int command = 0;
+	int verbose = 0;
+	int startaddr = 0;
+	int memfill = 0;
+	int reset = -200;
 	char *device = NULL;
-	char *memtype = NULL;
-	char *reset = NULL;
-	char *startaddr = NULL;
 	char *filename = NULL;
-	char *memfill = NULL;
 
-	while ((ch = getopt(argc, argv, "d:DhiLm:r:s:vw:z:")) != -1) {
+	while ((ch = getopt(argc, argv, "d:DEhiLm:r:s:vw:z:")) != -1) {
 		switch (ch) {
 		case 'd':
 			device = optarg;
 			break;
 		case 'D':
-			disable = 1;
+			command |= CMD_DISABLE;
+			break;
+		case 'E':
+			command |= CMD_ENABLE;
 			break;
 		case 'h':
 			usage();
 			return EXIT_SUCCESS;
 		case 'i':
-			getinfo = 1;
+			command |= CMD_IDENTIFY;
 			break;
 		case 'L':
-			printlist = 1;
+			command |= CMD_LIST;
 			break;
 		case 'm':
-			memtype = optarg;
+			memtype = memtype_by_name(optarg);
+			if (!memtype) {
+				fprintf(stderr, "error: unknown memory type \"%s\"\n", optarg);
+				return EXIT_FAILURE;
+			}
 			break;
 		case 's':
-			startaddr = optarg;
+			if (str_to_num(optarg, "startaddr", 0, INT_MAX, &startaddr) != 0)
+				return EXIT_FAILURE;
 			break;
 		case 'r':
-			reset = optarg;
+			if (str_to_num(optarg, "reset", -255, 255, &reset) != 0)
+				return EXIT_FAILURE;
 			break;
 		case 'v':
 			verbose++;
 			break;
 		case 'w':
+			command |= CMD_WRITE;
 			filename = optarg;
 			break;
 		case 'z':
-			memfill = optarg;
+			if (str_to_num(optarg, "memfill", 0, 255, &memfill) != 0)
+				return EXIT_FAILURE;
 			break;
 		case '?':
 			return EXIT_FAILURE;
@@ -361,108 +385,81 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (printlist) {
+	if (argc > 0) {
+		fprintf(stderr, "error: superfluous positional argument: %s\n", argv[0]);
+		return EXIT_FAILURE;
+	}
+
+	switch (command) {
+	case CMD_LIST:
 		memlist();
 		return EXIT_SUCCESS;
-	}
-
-	if (getinfo) {
+	case CMD_IDENTIFY:
 		fd = serial_open(device, SERIAL_SPEED);
 		if (fd < 0)
 			return EXIT_FAILURE;
-		res = device_info(fd, serial_device(device), verbose);
+		res = device_identify(fd, serial_device(device), verbose);
 		close(fd);
 		return res == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
-	}
+	case CMD_DISABLE:
+		if (!memtype) {
+			fprintf(stderr, "error: memtype required for buffer disable\n");
+			return EXIT_FAILURE;
+		}
 
-	if (!memtype) {
-		fprintf(stderr, "error: memtype required for write mode and buffer disable\n");
-		return EXIT_FAILURE;
-	}
-
-	memtype_ptr = memtype_by_name(memtype);
-	if (!memtype_ptr) {
-		fprintf(stderr, "error: unknown memory type \"%s\"\n", memtype);
-		return EXIT_FAILURE;
-	}
-	conf.memtype = memtype_ptr->type;
-	conf.memsize = memtype_ptr->size;
-
-	if (disable) {
 		fd = serial_open(device, SERIAL_SPEED);
 		if (fd < 0)
 			return EXIT_FAILURE;
-		conf.reset_time = 0;
-		conf.reset_polarity = '0';
-		conf.device_enable = 'D';
-		res = device_config(fd, &conf, verbose);
+		res = device_config(fd, memtype->type, 0, DEVICE_DISABLE, verbose);
 		close(fd);
 		return res == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
-	}
-
-	if (!filename) {
-		fprintf(stderr, "error: no operation specified\n");
-		return EXIT_FAILURE;
-	}
-
-	if (startaddr) {
-		if (str_to_num(startaddr, "start", 0, memtype_ptr->size - 1, &startaddrval) != 0)
-			return EXIT_FAILURE;
-	}
-
-	if (memfill) {
-		if (str_to_num(memfill, "memfill", 0, 255, &memfillval) != 0) {
+	case CMD_ENABLE:
+		if (!memtype) {
+			fprintf(stderr, "error: memtype required for buffer enable\n");
 			return EXIT_FAILURE;
 		}
-		memset(mem_buf, memfillval, memtype_ptr->size);
-	}
 
-	if (reset) {
-		if (str_to_num(reset, "reset", -255, 255, &resetval) != 0)
+		fd = serial_open(device, SERIAL_SPEED);
+		if (fd < 0)
 			return EXIT_FAILURE;
-	}
+		res = device_config(fd, memtype->type, 0, DEVICE_ENABLE, verbose);
+		close(fd);
+		return res == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+	case CMD_WRITE:
+		if (!memtype) {
+			fprintf(stderr, "error: memtype required for write\n");
+			return EXIT_FAILURE;
+		}
+		memset(mem_buf, memfill, memtype->size);
 
-	if (resetval == 0) {
-		conf.reset_polarity = '0';
-		conf.reset_time = 0;
-	} else if (resetval < 0) {
-		conf.reset_polarity = 'N';
-		conf.reset_time = -resetval;
-	} else if (resetval > 0) {
-		conf.reset_polarity = 'P';
-		conf.reset_time = resetval;
-	}
-	conf.device_enable = 'E';
-
-	if (filename && memtype_ptr) {
-		if ((filelen = read_file(filename, startaddrval, mem_buf, memtype_ptr->size)) < 0) {
+		if ((filelen = read_file(filename, startaddr, mem_buf, memtype->size)) < 0) {
 			return EXIT_FAILURE;
 		}
 		printf("\n");
-		printf("%s: [0x%06x : 0x%06x] (0x%04x)\n", filename, startaddrval, startaddrval + filelen - 1,
-		       filelen);
-		printf("\n");
-		printf("EPROM:   %5s (0x%04x)\n", memtype_ptr->name, memtype_ptr->size);
-		printf("Fill:     0x%02x\n", memfillval);
-		if (conf.reset_time) {
-			printf("Reset:    %4d ms\n", (conf.reset_polarity == 'N' ? -conf.reset_time : conf.reset_time));
+		printf("[0x%05x : 0x%05x] (0x%05x) %s\n",
+		       startaddr, startaddr + filelen - 1, filelen, filename);
+		printf("[0x%05x : 0x%05x] (0x%05x) EPROM %s 0x%02x ",
+		       0, memtype->size -1, memtype->size, memtype->name, memfill);
+		if (reset == 0) {
+			printf("noreset\n");
 		} else {
-			printf("Reset:     OFF\n");
+			printf("%dms\n", reset);
 		}
+		printf("\n");
 
 		fd = serial_open(device, SERIAL_SPEED);
 		if (fd < 0)
 			return EXIT_FAILURE;
-		res = device_config(fd, &conf, verbose);
-		res += device_data(fd, &conf, verbose);
+		res = device_config(fd, memtype->type, reset, DEVICE_DISABLE, verbose);
+		res += device_data(fd, memtype->size, verbose);
 		close(fd);
 		if (res == 0)
-			printf("Transfer:   OK (0x%04x)\n\n", conf.memsize);
+			printf("Transfer: OK\n\n");
 		else
 			printf("Transfer: FAILED\n\n");
 		return res == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 	}
 
-	/* not reached */
+	fprintf(stderr, "error: use exactly one of: [-i] [-D] [-E] [-L] [-w filename]\n");
 	return EXIT_FAILURE;
 }

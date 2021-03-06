@@ -317,7 +317,7 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-	const struct memtype_entry *memtype;
+	const struct memtype_entry *memtype = NULL;
 	int res;
 	int fd;
 	int ch;

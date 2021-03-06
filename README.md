@@ -14,8 +14,9 @@ memsimctl has been successfully tested on:
 
  * Fedora 33 (x86_64)
  * Ubuntu 20.04 (x86_64)
- * OpenBSD 6.8/6.9 (x86_64)
+ * OpenBSD 6.8/6.9 (x86_64, sparc64)
  * FreeBSD 12.1 (x86_64)
+ * Raspbian 10 (armv7)
 
 ## Usage
 
